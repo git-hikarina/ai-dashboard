@@ -16,7 +16,6 @@ import {
   type User,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
-import { createClient } from "@/lib/supabase/client";
 import type { DbUser } from "@/lib/supabase/types";
 
 // ---------------------------------------------------------------------------
@@ -52,43 +51,29 @@ async function setSessionCookie(user: User | null) {
   }
 }
 
-/** Upsert the Firebase user into the Supabase `users` table and return the row. */
+/** Upsert the Firebase user via server API (uses service role, bypasses RLS). */
 async function syncUserToSupabase(user: User): Promise<DbUser | null> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("users")
-    .upsert(
-      {
-        firebase_uid: user.uid,
-        email: user.email!,
-        display_name: user.displayName || user.email!.split("@")[0],
+  try {
+    const token = await user.getIdToken();
+    const res = await fetch("/api/auth/sync", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
       },
-      { onConflict: "firebase_uid" }
-    )
-    .select()
-    .single();
-
-  if (error) {
-    console.error("[AuthContext] Failed to sync user to Supabase:", error);
+      body: JSON.stringify({
+        displayName: user.displayName || user.email?.split("@")[0] || "",
+      }),
+    });
+    if (!res.ok) {
+      console.error("[AuthContext] Sync failed:", res.status);
+      return null;
+    }
+    return (await res.json()) as DbUser;
+  } catch (err) {
+    console.error("[AuthContext] Failed to sync user to Supabase:", err);
     return null;
   }
-  return data as DbUser;
-}
-
-/** Load the user row from Supabase by Firebase UID. */
-async function loadUserData(firebaseUid: string): Promise<DbUser | null> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("users")
-    .select("*")
-    .eq("firebase_uid", firebaseUid)
-    .single();
-
-  if (error) {
-    console.error("[AuthContext] Failed to load user data:", error);
-    return null;
-  }
-  return data as DbUser;
 }
 
 // ---------------------------------------------------------------------------

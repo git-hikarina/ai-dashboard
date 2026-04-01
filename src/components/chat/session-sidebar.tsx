@@ -187,11 +187,15 @@ export function SessionSidebar({ onSessionSelect }: SessionSidebarProps) {
 
                 return (
                   <li key={session.id}>
-                    <button
-                      type="button"
+                    <div
+                      role="button"
+                      tabIndex={0}
                       onClick={() => handleSelect(session)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") handleSelect(session);
+                      }}
                       className={cn(
-                        "group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors",
+                        "group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors cursor-pointer",
                         isActive
                           ? "bg-accent text-accent-foreground"
                           : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -201,10 +205,9 @@ export function SessionSidebar({ onSessionSelect }: SessionSidebarProps) {
                       <span className="flex-1 truncate">
                         {session.title || "新しいチャット"}
                       </span>
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                      <button
+                        type="button"
+                        className="shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-destructive/10 group-hover:opacity-100"
                         onClick={(e) => handleDelete(e, session.id)}
                         disabled={isDeleting}
                       >
@@ -213,8 +216,8 @@ export function SessionSidebar({ onSessionSelect }: SessionSidebarProps) {
                         ) : (
                           <Trash2 className="size-3" />
                         )}
-                      </Button>
-                    </button>
+                      </button>
+                    </div>
                   </li>
                 );
               })}

@@ -1,4 +1,4 @@
-import { streamText } from 'ai';
+import { streamText, convertToModelMessages, type UIMessage } from 'ai';
 import { getProvider } from '@/lib/ai/providers';
 import { getModelById, type ModelInfo } from '@/lib/ai/models';
 import { verifyToken } from '@/lib/firebase/admin';
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
 
     // 2. Parse request body
     const { messages, modelId, sessionId } = (await request.json()) as {
-      messages: Parameters<typeof streamText>[0]['messages'];
+      messages: UIMessage[];
       modelId: string;
       sessionId: string;
     };
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     // 6. Stream the response
     const result = streamText({
       model: provider,
-      messages,
+      messages: await convertToModelMessages(messages),
       maxOutputTokens: model.maxTokens,
       onFinish: async ({ text, usage }) => {
         // 7. Save assistant message to DB
