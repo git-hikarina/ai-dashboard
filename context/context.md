@@ -35,24 +35,62 @@ ai-dashboard/
 │   │   ├── chat/
 │   │   │   ├── layout.tsx          # チャットレイアウト（Header + サイドバー + メイン）
 │   │   │   ├── page.tsx            # チャットトップ（空状態 + サイドバー）
-│   │   │   └── [id]/
-│   │   │       └── page.tsx        # 個別チャットセッション（ストリーミング）
+│   │   │   ├── [id]/
+│   │   │   │   └── page.tsx        # 個別チャットセッション（ストリーミング + コスト表示）
+│   │   │   └── presets/
+│   │   │       └── page.tsx        # プリセット管理ページ（CRUD + トグル）
+│   │   ├── admin/
+│   │   │   ├── layout.tsx          # 管理者レイアウト（権限ガード + サイドナビ）
+│   │   │   ├── page.tsx            # → /admin/usage にリダイレクト
+│   │   │   ├── usage/
+│   │   │   │   └── page.tsx        # 利用状況ダッシュボード（recharts）
+│   │   │   └── pricing/
+│   │   │       └── page.tsx        # モデル単価管理ページ
 │   │   └── api/
 │   │       ├── chat/
-│   │       │   └── route.ts        # AI ストリーミングエンドポイント
+│   │       │   └── route.ts        # AI ストリーミング（プリセット・自動ルーティング・予算監視統合）
 │   │       ├── sessions/
 │   │       │   ├── route.ts        # セッション一覧 / 作成
 │   │       │   └── [id]/
 │   │       │       └── route.ts    # セッション詳細 / 更新 / 削除
-│   │       └── messages/
-│   │           └── route.ts        # ユーザーメッセージ保存
+│   │       ├── messages/
+│   │       │   └── route.ts        # ユーザーメッセージ保存
+│   │       ├── presets/
+│   │       │   ├── route.ts        # プリセット一覧 / 作成
+│   │       │   └── [id]/
+│   │       │       ├── route.ts    # プリセット詳細 / 更新 / 削除
+│   │       │       └── toggle/
+│   │       │           └── route.ts # プリセットトグル
+│   │       ├── estimate/
+│   │       │   └── route.ts        # コスト推定API
+│   │       └── admin/
+│   │           ├── pricing/
+│   │           │   ├── route.ts    # モデル単価一覧
+│   │           │   └── [id]/
+│   │           │       └── route.ts # モデル単価更新（system_admin限定）
+│   │           ├── usage/
+│   │           │   ├── route.ts    # 利用状況サマリー
+│   │           │   └── daily/
+│   │           │       └── route.ts # 日別利用状況
+│   │           └── approval/
+│   │               └── [id]/
+│   │                   └── route.ts # 承認/却下API
 │   ├── components/
 │   │   ├── chat/
-│   │   │   ├── chat-input.tsx      # メッセージ入力（Enter送信, Shift+Enter改行）
+│   │   │   ├── chat-input.tsx      # メッセージ入力（コスト表示付き）
 │   │   │   ├── chat-messages.tsx   # メッセージ一覧（自動スクロール）
 │   │   │   ├── message-bubble.tsx  # 個別メッセージ表示
-│   │   │   ├── model-selector.tsx  # モデル選択ドロップダウン
-│   │   │   └── session-sidebar.tsx # セッション一覧サイドバー
+│   │   │   ├── model-selector.tsx  # モデル選択（自動モード対応）
+│   │   │   ├── session-sidebar.tsx # セッション一覧サイドバー
+│   │   │   ├── preset-selector.tsx # プリセット選択ドロップダウン
+│   │   │   ├── cost-display.tsx    # インラインコスト表示
+│   │   │   └── cost-confirm-dialog.tsx # コスト確認ダイアログ（¥500+）
+│   │   ├── admin/
+│   │   │   ├── pricing-table.tsx   # モデル単価編集テーブル
+│   │   │   ├── usage-summary-cards.tsx  # 利用サマリーカード
+│   │   │   ├── usage-daily-chart.tsx    # 日別コストチャート
+│   │   │   ├── usage-by-user-table.tsx  # ユーザー別集計テーブル
+│   │   │   └── usage-by-model-table.tsx # モデル別集計テーブル
 │   │   ├── layout/
 │   │   │   └── header.tsx          # アプリヘッダー
 │   │   ├── providers.tsx           # クライアントProviders
@@ -62,7 +100,14 @@ ai-dashboard/
 │   ├── lib/
 │   │   ├── ai/
 │   │   │   ├── models.ts           # モデルメタデータ（11モデル, 5プロバイダー）
-│   │   │   └── providers.ts        # AI SDK プロバイダーインスタンス
+│   │   │   ├── providers.ts        # AI SDK プロバイダーインスタンス
+│   │   │   ├── router.ts           # 自動ルーティング（ティア検出 + モデル選択）
+│   │   │   ├── token-estimator.ts  # トークン数推定（CJK/英語ヒューリスティック）
+│   │   │   └── cost-estimator.ts   # コスト推定エンジン
+│   │   ├── auth/
+│   │   │   └── resolve-user.ts     # Firebase UID → Supabase ユーザー + 所属解決
+│   │   ├── slack/
+│   │   │   └── notify.ts           # Slack通知（高コスト警告 + 予算アラート）
 │   │   ├── firebase/
 │   │   │   ├── admin.ts            # Firebase Admin SDK（トークン検証）
 │   │   │   └── client.ts           # Firebase Client SDK
@@ -76,8 +121,9 @@ ai-dashboard/
 │   └── proxy.ts                    # ルート保護（__session cookie チェック）
 ├── supabase/
 │   └── migrations/
-│       └── 001_initial_schema.sql  # 全テーブル定義 + シードデータ
-├── __tests__/                      # Vitest テスト（105テスト）
+│       ├── 001_initial_schema.sql  # 全テーブル定義 + シードデータ
+│       └── 002_phase2_schema.sql   # Phase 2: presets, user_preset_preferences, budget列
+├── __tests__/                      # Vitest テスト（198テスト）
 └── context/
     └── context.md                  # この仕様書
 ```
@@ -86,21 +132,23 @@ ai-dashboard/
 
 ## データベース設計（Supabase / PostgreSQL）
 
-### テーブル一覧（11テーブル）
+### テーブル一覧（13テーブル）
 
 | テーブル | 用途 |
 |---------|------|
 | `users` | ユーザー（Firebase Auth から同期） |
-| `organizations` | 組織 |
+| `organizations` | 組織（月間予算・アラートフラグ付き） |
 | `org_members` | 組織メンバー（junction） |
 | `teams` | チーム |
 | `team_members` | チームメンバー（junction） |
 | `credit_logs` | 個人クレジット履歴 |
 | `team_credit_logs` | チームクレジット履歴 |
-| `sessions` | チャットセッション |
+| `sessions` | チャットセッション（preset_id FK付き） |
 | `messages` | チャットメッセージ |
-| `usage_logs` | AI使用量ログ（コスト記録） |
+| `usage_logs` | AI使用量ログ（コスト記録、approval_status付き） |
 | `model_pricing` | モデル単価テーブル（管理者編集可） |
+| `presets` | カスタム指示プリセット（personal/team/organization スコープ） |
+| `user_preset_preferences` | ユーザーごとのプリセット有効/無効設定 |
 
 ### ユーザーロール
 
@@ -193,13 +241,26 @@ ai-dashboard/
 
 | メソッド | パス | 認証 | 用途 |
 |---------|------|------|------|
-| POST | `/api/chat` | Bearer | AIストリーミング応答 |
+| POST | `/api/chat` | Bearer | AIストリーミング応答（プリセット・自動ルーティング・予算監視統合） |
 | GET | `/api/sessions` | Bearer | セッション一覧 |
 | POST | `/api/sessions` | Bearer | セッション作成 |
 | GET | `/api/sessions/[id]` | Bearer | セッション + メッセージ取得 |
 | PATCH | `/api/sessions/[id]` | Bearer | セッション更新 |
 | DELETE | `/api/sessions/[id]` | Bearer | セッション削除 |
 | POST | `/api/messages` | Bearer | ユーザーメッセージ保存 |
+| POST | `/api/auth/sync` | Bearer | Firebase→Supabaseユーザー同期 |
+| GET | `/api/presets` | Bearer | プリセット一覧（スコープベース） |
+| POST | `/api/presets` | Bearer | プリセット作成 |
+| GET | `/api/presets/[id]` | Bearer | プリセット詳細 |
+| PATCH | `/api/presets/[id]` | Bearer | プリセット更新 |
+| DELETE | `/api/presets/[id]` | Bearer | プリセット削除 |
+| POST | `/api/presets/[id]/toggle` | Bearer | プリセット有効/無効トグル |
+| POST | `/api/estimate` | Bearer | コスト推定（自動ルーティング対応） |
+| GET | `/api/admin/pricing` | Bearer(admin) | モデル単価一覧 |
+| PATCH | `/api/admin/pricing/[id]` | Bearer(system_admin) | モデル単価更新 |
+| GET | `/api/admin/usage` | Bearer(admin) | 利用状況サマリー（月次） |
+| GET | `/api/admin/usage/daily` | Bearer(admin) | 日別利用状況 |
+| PATCH | `/api/admin/approval/[id]` | Bearer(admin) | 承認/却下 |
 
 ---
 
@@ -215,13 +276,14 @@ ai-dashboard/
 - マルチタブ（複数会話を同時に開ける）
 - 基本的なコスト記録（usage_logs）
 
-### Phase 2: 知能化 —「コスト制御とカスタマイズ」
-- カスタム指示セット（プリセット）CRUD + 切替UI
-- 自動ルーティング（プリセット推奨モデル連動）
-- コスト推定エンジン + 閾値アラート
-- モデル単価テーブル（管理者編集可能）
-- 管理者ダッシュボード（ユーザー別/モデル別集計）
-- Slack連携（¥1,000超の承認 + 月間予算警告）
+### Phase 2: 知能化 —「コスト制御とカスタマイズ」 ✅ 実装済み
+- カスタム指示セット（プリセット）CRUD + 切替UI + スコープ別管理
+- 自動ルーティング（ティア検出 + プリセット推奨モデル連動）
+- コスト推定エンジン + 閾値アラート（¥500確認、¥1,000承認）
+- モデル単価テーブル（管理者編集可能、system_admin限定）
+- 管理者ダッシュボード（利用サマリー + 日別チャート + ユーザー別/モデル別集計）
+- Slack連携（¥1,000超の高コスト警告 + 月間予算80%/100%アラート）
+- 認証ヘルパー（resolveUser: Firebase UID → ユーザー + 所属解決）
 
 ### Phase 3: ナレッジ —「RAG と比較」
 - ドキュメントRAG（アップロード→ベクトル化→検索）
@@ -290,6 +352,9 @@ OPENAI_API_KEY=
 GOOGLE_GENERATIVE_AI_API_KEY=
 DEEPSEEK_API_KEY=
 XAI_API_KEY=
+
+# Slack (Phase 2)
+SLACK_WEBHOOK_URL=              # Incoming Webhook URL（高コスト・予算通知用）
 ```
 
 ---
@@ -306,4 +371,18 @@ npm run test:run   # テスト（単発実行）
 
 ---
 
-最終更新: 2026-04-01
+## Zustand Store（chat-store.ts）
+
+```typescript
+interface ChatTab {
+  sessionId: string;
+  title: string;
+  modelId: string;           // 'auto' で自動モード
+  mode: 'auto' | 'fixed' | 'compare';
+  presetId: string | null;   // Phase 2で追加
+}
+```
+
+---
+
+最終更新: 2026-04-01（Phase 2 完了）
