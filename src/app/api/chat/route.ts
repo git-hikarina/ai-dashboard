@@ -1,8 +1,10 @@
 import { streamText, convertToModelMessages, type UIMessage } from 'ai';
 import { getProvider } from '@/lib/ai/providers';
-import { getModelById, type ModelInfo } from '@/lib/ai/models';
+import { getModelById, getAvailableModels, type ModelInfo } from '@/lib/ai/models';
+import { autoRoute } from '@/lib/ai/router';
 import { verifyToken } from '@/lib/firebase/admin';
 import { createServiceClient } from '@/lib/supabase/server';
+import { shouldSendBudgetAlert, formatBudgetAlert, sendSlackNotification } from '@/lib/slack/notify';
 
 // ---------------------------------------------------------------------------
 // POST /api/chat — Streaming AI chat endpoint
@@ -13,12 +15,15 @@ export async function POST(request: Request) {
     const { uid } = await verifyToken(request.headers.get('authorization'));
 
     // 2. Parse request body
-    const { messages, modelId, sessionId } = (await request.json()) as {
+    const { messages, modelId, sessionId, mode, presetId } = (await request.json()) as {
       messages: UIMessage[];
       modelId: string;
       sessionId: string;
+      mode?: 'auto' | 'fixed';
+      presetId?: string | null;
     };
 
+    // 3. Validate required fields
     if (!messages || !modelId || !sessionId) {
       return new Response(
         JSON.stringify({ error: 'Missing required fields: messages, modelId, sessionId' }),
@@ -26,19 +31,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 3. Look up model info from registry
-    const model = getModelById(modelId);
-    if (!model) {
-      return new Response(
-        JSON.stringify({ error: `Unknown model: ${modelId}` }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    // 4. Get AI SDK provider instance
-    const provider = getProvider(modelId);
-
-    // 5. Resolve authenticated user from Supabase
+    // 4. Create supabase client + resolve user
     const supabase = createServiceClient();
     const { data: user } = await supabase
       .from('users')
@@ -53,13 +46,57 @@ export async function POST(request: Request) {
       );
     }
 
-    // 6. Stream the response
+    // 5. Preset resolution + auto-routing
+    let systemPrompt: string | undefined;
+    let resolvedModelId = modelId;
+
+    if (presetId) {
+      const { data: preset } = await supabase
+        .from('presets')
+        .select('system_prompt, recommended_model')
+        .eq('id', presetId)
+        .single();
+
+      if (preset) {
+        systemPrompt = preset.system_prompt;
+        if (mode === 'auto' && preset.recommended_model) {
+          resolvedModelId = preset.recommended_model;
+        }
+      }
+    }
+
+    // Auto-route if mode=auto and no preset override
+    if (mode === 'auto' && resolvedModelId === modelId) {
+      const lastMsg = messages[messages.length - 1];
+      const lastText = lastMsg?.parts
+        ?.filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+        .map((p) => p.text)
+        .join('') ?? '';
+      const available = getAvailableModels();
+      const routed = autoRoute(lastText, available);
+      if (routed) resolvedModelId = routed.id;
+    }
+
+    // 6. Look up model info from registry
+    const model = getModelById(resolvedModelId);
+    if (!model) {
+      return new Response(
+        JSON.stringify({ error: `Unknown model: ${resolvedModelId}` }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // 7. Get AI SDK provider instance
+    const provider = getProvider(resolvedModelId);
+
+    // 8. Stream the response
     const result = streamText({
       model: provider,
+      system: systemPrompt,
       messages: await convertToModelMessages(messages),
       maxOutputTokens: model.maxTokens,
       onFinish: async ({ text, usage }) => {
-        // 7. Save assistant message to DB
+        // Save assistant message to DB
         const inputTokens = usage.inputTokens ?? 0;
         const outputTokens = usage.outputTokens ?? 0;
         const costJpy = calculateCost(model, inputTokens, outputTokens);
@@ -70,7 +107,7 @@ export async function POST(request: Request) {
             session_id: sessionId,
             role: 'assistant' as const,
             content: text,
-            model_used: modelId,
+            model_used: resolvedModelId,
             input_tokens: inputTokens,
             output_tokens: outputTokens,
             cost_jpy: costJpy,
@@ -79,19 +116,79 @@ export async function POST(request: Request) {
           .select('id')
           .single();
 
-        // 8. Log usage
+        // Log usage
         if (msg) {
           await supabase.from('usage_logs').insert({
             user_id: user.id,
             session_id: sessionId,
             message_id: msg.id,
             provider: model.provider,
-            model_id: modelId,
+            model_id: resolvedModelId,
             input_tokens: inputTokens,
             output_tokens: outputTokens,
             cost_jpy: costJpy,
             approval_status: 'auto' as const,
           });
+        }
+
+        // Budget monitoring
+        const { data: userFull } = await supabase
+          .from('users')
+          .select('active_organization_id, display_name')
+          .eq('id', user.id)
+          .single();
+
+        if (userFull?.active_organization_id) {
+          const { data: org } = await supabase
+            .from('organizations')
+            .select('name, monthly_budget_jpy, budget_alert_sent_80, budget_alert_sent_100, budget_alert_month')
+            .eq('id', userFull.active_organization_id)
+            .single();
+
+          if (org && Number(org.monthly_budget_jpy) > 0) {
+            const currentMonth = new Date().toISOString().slice(0, 7);
+            let alertSent80 = org.budget_alert_sent_80;
+            let alertSent100 = org.budget_alert_sent_100;
+
+            // Reset if new month
+            if (org.budget_alert_month !== currentMonth) {
+              alertSent80 = false;
+              alertSent100 = false;
+              await supabase
+                .from('organizations')
+                .update({ budget_alert_sent_80: false, budget_alert_sent_100: false, budget_alert_month: currentMonth })
+                .eq('id', userFull.active_organization_id);
+            }
+
+            // Get monthly total
+            const startOfMonth = `${currentMonth}-01T00:00:00Z`;
+            const { data: usageData } = await supabase
+              .from('usage_logs')
+              .select('cost_jpy')
+              .gte('created_at', startOfMonth);
+
+            const totalCost = (usageData ?? []).reduce((sum, row) => sum + Number(row.cost_jpy), 0);
+            const alertLevel = shouldSendBudgetAlert(totalCost, Number(org.monthly_budget_jpy), alertSent80, alertSent100);
+
+            if (alertLevel) {
+              const percentage = (totalCost / Number(org.monthly_budget_jpy)) * 100;
+              const alertText = formatBudgetAlert({
+                orgName: org.name,
+                usedAmount: totalCost,
+                budgetAmount: Number(org.monthly_budget_jpy),
+                percentage,
+              });
+              sendSlackNotification(alertText); // fire-and-forget
+
+              await supabase
+                .from('organizations')
+                .update({
+                  [`budget_alert_sent_${alertLevel}`]: true,
+                  budget_alert_month: currentMonth,
+                })
+                .eq('id', userFull.active_organization_id);
+            }
+          }
         }
 
         // Update session's updated_at timestamp
