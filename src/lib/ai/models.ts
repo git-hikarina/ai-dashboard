@@ -151,6 +151,22 @@ export function getModelsByTier(tier: ModelInfo['tier']): ModelInfo[] {
   return MODELS.filter((m) => m.tier === tier);
 }
 
+const PROVIDER_ENV_KEYS: Record<ModelInfo['provider'], string> = {
+  anthropic: 'ANTHROPIC_API_KEY',
+  openai: 'OPENAI_API_KEY',
+  google: 'GOOGLE_GENERATIVE_AI_API_KEY',
+  deepseek: 'DEEPSEEK_API_KEY',
+  xai: 'XAI_API_KEY',
+};
+
+export function isProviderConfigured(provider: ModelInfo['provider']): boolean {
+  return !!process.env[PROVIDER_ENV_KEYS[provider]];
+}
+
+export function getAvailableModels(): ModelInfo[] {
+  return MODELS.filter((m) => isProviderConfigured(m.provider));
+}
+
 export const DEFAULT_MODEL_ID = 'claude-sonnet-4-6';
 
 export function getDefaultModel(): ModelInfo {

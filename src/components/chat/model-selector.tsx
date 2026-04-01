@@ -17,6 +17,7 @@ import { ChevronDownIcon } from "lucide-react";
 interface ModelSelectorProps {
   selectedModelId: string;
   onModelSelect: (modelId: string) => void;
+  availableModels?: ModelInfo[];
 }
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -39,9 +40,9 @@ const TIER_COLORS: Record<string, string> = {
   heavy: "bg-purple-100 text-purple-700",
 };
 
-function groupModelsByProvider(): Record<string, ModelInfo[]> {
+function groupModelsByProvider(models: ModelInfo[]): Record<string, ModelInfo[]> {
   const groups: Record<string, ModelInfo[]> = {};
-  for (const model of MODELS) {
+  for (const model of models) {
     if (!groups[model.provider]) {
       groups[model.provider] = [];
     }
@@ -53,9 +54,11 @@ function groupModelsByProvider(): Record<string, ModelInfo[]> {
 export function ModelSelector({
   selectedModelId,
   onModelSelect,
+  availableModels,
 }: ModelSelectorProps) {
   const selectedModel = getModelById(selectedModelId);
-  const groups = groupModelsByProvider();
+  const models = availableModels ?? MODELS;
+  const groups = groupModelsByProvider(models);
   const providerKeys = Object.keys(groups);
 
   return (
