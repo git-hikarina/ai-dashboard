@@ -173,8 +173,8 @@ describe('getModelsByTier', () => {
 });
 
 describe('DEFAULT_MODEL_ID', () => {
-  it('is claude-sonnet-4-6', () => {
-    expect(DEFAULT_MODEL_ID).toBe('claude-sonnet-4-6');
+  it('is gemini-2.0-flash', () => {
+    expect(DEFAULT_MODEL_ID).toBe('gemini-2.0-flash');
   });
 
   it('resolves to a valid model', () => {
@@ -188,7 +188,7 @@ describe('getDefaultModel', () => {
   it('returns the default model', () => {
     const model = getDefaultModel();
     expect(model.id).toBe(DEFAULT_MODEL_ID);
-    expect(model.provider).toBe('anthropic');
-    expect(model.tier).toBe('standard');
+    expect(model.provider).toBe('google');
+    expect(model.tier).toBe('light');
   });
 });

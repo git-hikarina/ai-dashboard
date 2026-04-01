@@ -167,7 +167,7 @@ export function getAvailableModels(): ModelInfo[] {
   return MODELS.filter((m) => isProviderConfigured(m.provider));
 }
 
-export const DEFAULT_MODEL_ID = 'claude-sonnet-4-6';
+export const DEFAULT_MODEL_ID = 'gemini-2.0-flash';
 
 export function getDefaultModel(): ModelInfo {
   const model = getModelById(DEFAULT_MODEL_ID);
