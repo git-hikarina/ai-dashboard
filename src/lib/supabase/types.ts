@@ -34,9 +34,13 @@ export type MessageRole = "user" | "assistant" | "system";
 /** Usage log approval statuses */
 export type ApprovalStatus =
   | "auto"
+  | "pending"
   | "user_approved"
   | "admin_approved"
   | "rejected";
+
+/** Preset scope levels */
+export type PresetScope = "personal" | "team" | "organization";
 
 /** AI model providers */
 export type ModelProvider =
@@ -81,6 +85,10 @@ export interface DbOrganization {
   plan_expires_at: string | null;
   plan_billing_cycle: BillingCycle | null;
   feature_restrictions: Record<string, unknown>;
+  monthly_budget_jpy: number;
+  budget_alert_sent_80: boolean;
+  budget_alert_sent_100: boolean;
+  budget_alert_month: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -187,6 +195,32 @@ export interface DbUsageLog {
   created_at: string;
 }
 
+/** Presets (custom instruction sets) */
+export interface DbPreset {
+  id: string;
+  name: string;
+  description: string | null;
+  system_prompt: string;
+  recommended_model: string | null;
+  icon: string | null;
+  scope: PresetScope;
+  owner_id: string | null;
+  team_id: string | null;
+  organization_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** User preset preferences */
+export interface DbUserPresetPreference {
+  id: string;
+  user_id: string;
+  preset_id: string;
+  is_enabled: boolean;
+  created_at: string;
+}
+
 /** Model pricing reference table */
 export interface DbModelPricing {
   id: string;
@@ -245,6 +279,16 @@ export type DbModelPricingInsert = Omit<
   "id" | "updated_at"
 > &
   Partial<Pick<DbModelPricing, "id">>;
+
+export type DbPresetInsert = Omit<DbPreset, "id" | "created_at" | "updated_at"> &
+  Partial<Pick<DbPreset, "id">>;
+
+export type DbPresetUpdate = Partial<Omit<DbPreset, "id" | "created_at">>;
+
+export type DbUserPresetPreferenceInsert = Omit<
+  DbUserPresetPreference,
+  "id" | "created_at"
+> & Partial<Pick<DbUserPresetPreference, "id">>;
 
 // ---------------------------------------------------------------------------
 // Update Types (all fields optional except id)

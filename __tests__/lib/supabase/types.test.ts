@@ -242,6 +242,10 @@ describe("DbOrganization", () => {
     plan_expires_at: "2026-01-01T00:00:00Z",
     plan_billing_cycle: "yearly",
     feature_restrictions: {},
+    monthly_budget_jpy: 0,
+    budget_alert_sent_80: false,
+    budget_alert_sent_100: false,
+    budget_alert_month: null,
     created_at: "2025-01-01T00:00:00Z",
     updated_at: "2025-01-01T00:00:00Z",
   };
@@ -578,6 +582,10 @@ describe("Insert types", () => {
       plan_expires_at: null,
       plan_billing_cycle: null,
       feature_restrictions: {},
+      monthly_budget_jpy: 0,
+      budget_alert_sent_80: false,
+      budget_alert_sent_100: false,
+      budget_alert_month: null,
     };
     expect(insert).not.toHaveProperty("created_at");
     expect(insert).not.toHaveProperty("updated_at");
