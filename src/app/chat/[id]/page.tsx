@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo, use } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef, use } from "react";
 import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
@@ -13,6 +13,8 @@ import { SessionSidebar } from "@/components/chat/session-sidebar";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ChatInput } from "@/components/chat/chat-input";
 import { ModelSelector } from "@/components/chat/model-selector";
+import { PresetSelector } from "@/components/chat/preset-selector";
+import { CostConfirmDialog } from "@/components/chat/cost-confirm-dialog";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -73,7 +75,7 @@ export default function ChatSessionPage({
   const { id: sessionId } = use(params);
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
-  const { openTab, activeTabId, tabs, updateTabModel } = useChatStore();
+  const { openTab, activeTabId, tabs, updateTabModel, updateTabPreset } = useChatStore();
 
   // -- Local state -----------------------------------------------------------
 
@@ -81,9 +83,24 @@ export default function ChatSessionPage({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sessionLoading, setSessionLoading] = useState(true);
 
-  // Derive model from store tab or session data
+  // Derive model and preset from store tab or session data
   const activeTab = tabs.find((t) => t.sessionId === sessionId);
   const modelId = activeTab?.modelId ?? sessionData?.fixed_model ?? DEFAULT_MODEL_ID;
+  const presetId = activeTab?.presetId ?? null;
+
+  // Cost estimation state
+  const [costEstimate, setCostEstimate] = useState<{
+    estimatedCostJpy: number;
+    maxCostJpy: number;
+    estimatedInputTokens: number;
+    estimatedOutputTokens: number;
+    message: string;
+    resolvedModelId: string;
+    modelDisplayName: string;
+  } | null>(null);
+  const [showCostConfirm, setShowCostConfirm] = useState(false);
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
+  const costDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // -- Load session data on mount --------------------------------------------
 
@@ -145,9 +162,14 @@ export default function ChatSessionPage({
           const token = await getAuthToken();
           return { Authorization: `Bearer ${token}` };
         },
-        body: { modelId, sessionId },
+        body: {
+          modelId,
+          sessionId,
+          mode: modelId === "auto" ? "auto" : "fixed",
+          presetId,
+        },
       }),
-    [modelId, sessionId],
+    [modelId, sessionId, presetId],
   );
 
   // -- Compute initial messages from loaded session data ---------------------
@@ -190,7 +212,7 @@ export default function ChatSessionPage({
 
   // -- Handle sending messages -----------------------------------------------
 
-  const handleSend = useCallback(
+  const doSend = useCallback(
     async (text: string) => {
       // 1. Persist user message to DB
       try {
@@ -209,9 +231,112 @@ export default function ChatSessionPage({
 
       // 2. Send via useChat (streams AI response)
       sendMessage({ text });
+
+      // 3. Clear cost estimate after sending
+      setCostEstimate(null);
     },
     [sessionId, sendMessage],
   );
+
+  const handleSend = useCallback(
+    (text: string) => {
+      // If estimated cost > 500, show confirmation dialog
+      if (costEstimate && costEstimate.estimatedCostJpy > 500) {
+        setPendingMessage(text);
+        setShowCostConfirm(true);
+        return;
+      }
+      doSend(text);
+    },
+    [costEstimate, doSend],
+  );
+
+  const handleCostConfirm = useCallback(() => {
+    setShowCostConfirm(false);
+    if (pendingMessage) {
+      doSend(pendingMessage);
+      setPendingMessage(null);
+    }
+  }, [pendingMessage, doSend]);
+
+  const handleCostCancel = useCallback(() => {
+    setShowCostConfirm(false);
+    setPendingMessage(null);
+  }, []);
+
+  // -- Handle preset selection ------------------------------------------------
+
+  const handlePresetSelect = useCallback(
+    (newPresetId: string | null, recommendedModel: string | null) => {
+      updateTabPreset(sessionId, newPresetId);
+      if (recommendedModel) {
+        updateTabModel(sessionId, recommendedModel);
+      }
+    },
+    [sessionId, updateTabPreset, updateTabModel],
+  );
+
+  // -- Debounced cost estimation ----------------------------------------------
+
+  const handleInputChange = useCallback(
+    (value: string) => {
+      if (costDebounceRef.current) {
+        clearTimeout(costDebounceRef.current);
+      }
+
+      const trimmed = value.trim();
+      if (!trimmed) {
+        setCostEstimate(null);
+        return;
+      }
+
+      costDebounceRef.current = setTimeout(async () => {
+        try {
+          const token = await getAuthToken();
+          const conversationMessages = messages
+            .filter((m) => m.role === "user" || m.role === "assistant")
+            .map((m) => ({
+              role: m.role,
+              content: getTextContent(m),
+            }));
+
+          const res = await fetch("/api/estimate", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              messages: [
+                ...conversationMessages,
+                { role: "user", content: trimmed },
+              ],
+              modelId,
+              mode: modelId === "auto" ? "auto" : "fixed",
+              presetId,
+            }),
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            setCostEstimate(data);
+          }
+        } catch (err) {
+          console.error("[ChatSession] Cost estimation failed:", err);
+        }
+      }, 500);
+    },
+    [messages, modelId, presetId],
+  );
+
+  // Clean up debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (costDebounceRef.current) {
+        clearTimeout(costDebounceRef.current);
+      }
+    };
+  }, []);
 
   // -- Update session title --------------------------------------------------
 
@@ -314,11 +439,15 @@ export default function ChatSessionPage({
     <>
       <SessionSidebar onSessionSelect={handleSessionSelect} />
       <main className="flex flex-1 flex-col overflow-hidden bg-white">
-        {/* Toolbar: model selector */}
+        {/* Toolbar: model selector + preset selector */}
         <div className="flex items-center gap-3 border-b px-4 py-2">
           <ModelSelector
             selectedModelId={modelId}
             onModelSelect={handleModelChange}
+          />
+          <PresetSelector
+            selectedPresetId={presetId}
+            onPresetSelect={handlePresetSelect}
           />
           <span className="text-xs text-muted-foreground">
             {sessionData?.title ?? "新しいチャット"}
@@ -334,8 +463,29 @@ export default function ChatSessionPage({
         <ChatMessages messages={displayMessages} isLoading={isLoading} />
 
         {/* Input */}
-        <ChatInput onSend={handleSend} isLoading={isLoading} />
+        <ChatInput
+          onSend={handleSend}
+          isLoading={isLoading}
+          costMessage={costEstimate?.message ?? null}
+          estimatedCost={costEstimate?.estimatedCostJpy ?? null}
+          onInputChange={handleInputChange}
+        />
       </main>
+
+      {/* Cost confirmation dialog */}
+      {costEstimate && (
+        <CostConfirmDialog
+          open={showCostConfirm}
+          onConfirm={handleCostConfirm}
+          onCancel={handleCostCancel}
+          estimatedCost={costEstimate.estimatedCostJpy}
+          maxCost={costEstimate.maxCostJpy}
+          modelName={costEstimate.modelDisplayName}
+          inputTokens={costEstimate.estimatedInputTokens}
+          outputTokens={costEstimate.estimatedOutputTokens}
+          requiresApproval={costEstimate.estimatedCostJpy > 1000}
+        />
+      )}
     </>
   );
 }

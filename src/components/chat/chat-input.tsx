@@ -4,17 +4,24 @@ import { useState, useRef, useCallback, type KeyboardEvent } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { SendHorizontal } from "lucide-react";
+import { CostDisplay } from "@/components/chat/cost-display";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
   isLoading: boolean;
   disabled?: boolean;
+  costMessage?: string | null;
+  estimatedCost?: number | null;
+  onInputChange?: (value: string) => void;
 }
 
 export function ChatInput({
   onSend,
   isLoading,
   disabled = false,
+  costMessage = null,
+  estimatedCost = null,
+  onInputChange,
 }: ChatInputProps) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -46,7 +53,10 @@ export function ChatInput({
         <Textarea
           ref={textareaRef}
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => {
+            setValue(e.target.value);
+            onInputChange?.(e.target.value);
+          }}
           onKeyDown={handleKeyDown}
           placeholder="メッセージを入力..."
           disabled={isDisabled}
@@ -63,6 +73,7 @@ export function ChatInput({
           <span className="sr-only">送信</span>
         </Button>
       </div>
+      <CostDisplay message={costMessage} estimatedCost={estimatedCost} />
     </div>
   );
 }
