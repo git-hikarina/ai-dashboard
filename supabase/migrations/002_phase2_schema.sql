@@ -29,6 +29,8 @@ CREATE TABLE presets (
   )
 );
 
+COMMENT ON TABLE presets IS 'Custom instruction sets (system prompts) scoped to personal, team, or organization level';
+
 CREATE INDEX idx_presets_owner_id ON presets (owner_id) WHERE owner_id IS NOT NULL;
 CREATE INDEX idx_presets_team_id ON presets (team_id) WHERE team_id IS NOT NULL;
 CREATE INDEX idx_presets_organization_id ON presets (organization_id) WHERE organization_id IS NOT NULL;
@@ -52,6 +54,8 @@ CREATE TABLE user_preset_preferences (
 
   CONSTRAINT user_preset_preferences_unique UNIQUE (user_id, preset_id)
 );
+
+COMMENT ON TABLE user_preset_preferences IS 'Per-user enabled/disabled preferences for available presets';
 
 CREATE INDEX idx_user_preset_preferences_user_id ON user_preset_preferences (user_id);
 

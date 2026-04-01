@@ -283,8 +283,6 @@ export type DbModelPricingInsert = Omit<
 export type DbPresetInsert = Omit<DbPreset, "id" | "created_at" | "updated_at"> &
   Partial<Pick<DbPreset, "id">>;
 
-export type DbPresetUpdate = Partial<Omit<DbPreset, "id" | "created_at">>;
-
 export type DbUserPresetPreferenceInsert = Omit<
   DbUserPresetPreference,
   "id" | "created_at"
@@ -303,5 +301,7 @@ export type DbOrganizationUpdate = Partial<
 export type DbTeamUpdate = Partial<Omit<DbTeam, "id" | "created_at">>;
 
 export type DbSessionUpdate = Partial<Omit<DbSession, "id" | "created_at">>;
+
+export type DbPresetUpdate = Partial<Omit<DbPreset, "id" | "created_at">>;
 
 export type DbModelPricingUpdate = Partial<Omit<DbModelPricing, "id">>;

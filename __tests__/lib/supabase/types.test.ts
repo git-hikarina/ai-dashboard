@@ -10,6 +10,7 @@ import type {
   MessageRole,
   ApprovalStatus,
   ModelProvider,
+  PresetScope,
   DbUser,
   DbOrganization,
   DbOrgMember,
@@ -20,6 +21,8 @@ import type {
   DbSession,
   DbMessage,
   DbUsageLog,
+  DbPreset,
+  DbUserPresetPreference,
   DbModelPricing,
   DbUserInsert,
   DbOrganizationInsert,
@@ -31,6 +34,9 @@ import type {
   DbSessionInsert,
   DbMessageInsert,
   DbUsageLogInsert,
+  DbPresetInsert,
+  DbPresetUpdate,
+  DbUserPresetPreferenceInsert,
   DbModelPricingInsert,
   DbUserUpdate,
   DbOrganizationUpdate,
@@ -135,13 +141,15 @@ describe("Enum / literal union types", () => {
   it("ApprovalStatus covers all expected values", () => {
     const statuses: ApprovalStatus[] = [
       "auto",
+      "pending",
       "user_approved",
       "admin_approved",
       "rejected",
     ];
-    expect(statuses).toHaveLength(4);
+    expect(statuses).toHaveLength(5);
 
     assertType<AssertAssignable<"auto", ApprovalStatus>>();
+    assertType<AssertAssignable<"pending", ApprovalStatus>>();
     assertType<AssertAssignable<"user_approved", ApprovalStatus>>();
     assertType<AssertAssignable<"admin_approved", ApprovalStatus>>();
     assertType<AssertAssignable<"rejected", ApprovalStatus>>();
@@ -529,6 +537,109 @@ describe("DbModelPricing", () => {
   });
 });
 
+describe("DbPreset", () => {
+  const preset: DbPreset = {
+    id: "uuid-preset",
+    name: "Code Review Assistant",
+    description: "Helps with code reviews",
+    system_prompt: "You are a code review expert.",
+    recommended_model: "gpt-4o",
+    icon: "code",
+    scope: "personal",
+    owner_id: "uuid-owner",
+    team_id: null,
+    organization_id: null,
+    is_active: true,
+    created_at: "2025-01-01T00:00:00Z",
+    updated_at: "2025-01-01T00:00:00Z",
+  };
+
+  it("has all required fields", () => {
+    expect(preset).toHaveProperty("id");
+    expect(preset).toHaveProperty("name");
+    expect(preset).toHaveProperty("description");
+    expect(preset).toHaveProperty("system_prompt");
+    expect(preset).toHaveProperty("recommended_model");
+    expect(preset).toHaveProperty("icon");
+    expect(preset).toHaveProperty("scope");
+    expect(preset).toHaveProperty("owner_id");
+    expect(preset).toHaveProperty("team_id");
+    expect(preset).toHaveProperty("organization_id");
+    expect(preset).toHaveProperty("is_active");
+    expect(preset).toHaveProperty("created_at");
+    expect(preset).toHaveProperty("updated_at");
+  });
+
+  it("scope field uses PresetScope type", () => {
+    assertType<AssertAssignable<DbPreset["scope"], PresetScope>>();
+    assertType<AssertAssignable<PresetScope, DbPreset["scope"]>>();
+  });
+
+  it("scope ownership invariant: personal scope has owner_id, no team_id or organization_id", () => {
+    const personal: DbPreset = {
+      ...preset,
+      scope: "personal",
+      owner_id: "uuid-owner",
+      team_id: null,
+      organization_id: null,
+    };
+    expect(personal.scope).toBe("personal");
+    expect(personal.owner_id).not.toBeNull();
+    expect(personal.team_id).toBeNull();
+    expect(personal.organization_id).toBeNull();
+  });
+
+  it("scope ownership invariant: team scope has team_id, no owner_id or organization_id", () => {
+    const team: DbPreset = {
+      ...preset,
+      scope: "team",
+      owner_id: null,
+      team_id: "uuid-team",
+      organization_id: null,
+    };
+    expect(team.scope).toBe("team");
+    expect(team.team_id).not.toBeNull();
+    expect(team.owner_id).toBeNull();
+    expect(team.organization_id).toBeNull();
+  });
+
+  it("scope ownership invariant: organization scope has organization_id, no owner_id or team_id", () => {
+    const org: DbPreset = {
+      ...preset,
+      scope: "organization",
+      owner_id: null,
+      team_id: null,
+      organization_id: "uuid-org",
+    };
+    expect(org.scope).toBe("organization");
+    expect(org.organization_id).not.toBeNull();
+    expect(org.owner_id).toBeNull();
+    expect(org.team_id).toBeNull();
+  });
+});
+
+describe("DbUserPresetPreference", () => {
+  const pref: DbUserPresetPreference = {
+    id: "uuid-pref",
+    user_id: "uuid-user",
+    preset_id: "uuid-preset",
+    is_enabled: true,
+    created_at: "2025-01-01T00:00:00Z",
+  };
+
+  it("has all required fields", () => {
+    expect(pref).toHaveProperty("id");
+    expect(pref).toHaveProperty("user_id");
+    expect(pref).toHaveProperty("preset_id");
+    expect(pref).toHaveProperty("is_enabled");
+    expect(pref).toHaveProperty("created_at");
+  });
+
+  it("is_enabled is boolean", () => {
+    expect(typeof pref.is_enabled).toBe("boolean");
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Insert type tests
 // ---------------------------------------------------------------------------
@@ -706,6 +817,32 @@ describe("Insert types", () => {
     };
     expect(insert).not.toHaveProperty("updated_at");
   });
+
+  it("DbPresetInsert omits auto-generated fields", () => {
+    const insert: DbPresetInsert = {
+      name: "My Preset",
+      description: null,
+      system_prompt: "You are helpful.",
+      recommended_model: null,
+      icon: null,
+      scope: "personal",
+      owner_id: "uuid-owner",
+      team_id: null,
+      organization_id: null,
+      is_active: true,
+    };
+    expect(insert).not.toHaveProperty("created_at");
+    expect(insert).not.toHaveProperty("updated_at");
+  });
+
+  it("DbUserPresetPreferenceInsert omits auto-generated fields", () => {
+    const insert: DbUserPresetPreferenceInsert = {
+      user_id: "uuid-user",
+      preset_id: "uuid-preset",
+      is_enabled: true,
+    };
+    expect(insert).not.toHaveProperty("created_at");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -738,6 +875,12 @@ describe("Update types", () => {
   it("DbModelPricingUpdate allows partial fields", () => {
     const update: DbModelPricingUpdate = { input_price_per_1k: 3.0 };
     expect(update.input_price_per_1k).toBe(3.0);
+  });
+
+  it("DbPresetUpdate allows partial fields", () => {
+    const update: DbPresetUpdate = { name: "Renamed Preset", is_active: false };
+    expect(update.name).toBe("Renamed Preset");
+    expect(update.is_active).toBe(false);
   });
 });
 

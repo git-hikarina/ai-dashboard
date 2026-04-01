@@ -116,6 +116,45 @@ RLS有効だがポリシー未設定（service role keyで操作）。
 - コミットメッセージは英語
 - 実行形式: Subagent-Driven Development
 
+## .claude/ 設定（2026-04-01 更新）
+
+### エージェントチーム（8体）
+
+| エージェント | 役割 | ツール権限 |
+|---|---|---|
+| planner | 企画・仕様策定 | Read専用 |
+| designer | UI/UXデザイン（shadcn/ui, Tailwind v4） | Read/Write/Edit |
+| frontend | フロントエンド実装（AI SDK v6, Zustand） | Read/Write/Edit |
+| logic-dev | ビジネスロジック・API（クレジット管理, Supabase） | Read/Write/Edit |
+| tester | テスト作成・実行（Playwright, Vitest） | Read/Write/Edit |
+| reviewer | コードレビュー（品質・セキュリティ・AI固有） | Read専用 |
+| red-hacker | 攻撃者視点の脆弱性分析 | Read専用 |
+| blue-hacker | 防御策の設計・実装 | Read/Write/Edit |
+
+- `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1"` 有効化済み（settings.json）
+- 全エージェントをFP計算ツール用 → AIダッシュボード用に書き換え済み
+
+### スキル（3つ）
+
+| スキル | 用途 |
+|---|---|
+| `/create-api-endpoint` | 新規APIエンドポイント追加テンプレート（認証・バリデーション・テスト雛形） |
+| `/create-feature` | 新機能追加の定型フロー（仕様→設計→実装→テスト→context.md更新） |
+| `/update-context` | context/context.md の更新手順 |
+
+※ 旧 `create-calculator`（FP計算ツール用）は `create-api-endpoint` にリネーム・内容変更済み
+
+### ルール（3つ、変更なし）
+
+- `code-style.md` — 最小限の変更、安定性重視、変更前に説明・承認
+- `testing.md` — npm run buildは実行しない、npx tsc --noEmit、context.md更新
+- `security.md` — シークレット出力禁止、PII禁止
+
+### settings.json の変更
+
+- WebFetch許可: issoh.co.jp, am.mufg.jp → sdk.vercel.ai, supabase.com, firebase.google.com
+- サンドボックス設定: 削除済み
+
 ## メモリ
 
 メモリファイルは `/Users/ryusei/.claude/projects/-Users-ryusei-Documents-PROJECT--MEGAPHONE--ai-dashboard-dev-master/memory/` に保存済み:
