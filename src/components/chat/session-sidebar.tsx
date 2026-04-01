@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useChatStore } from "@/stores/chat-store";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, Trash2, MessageSquare, Loader2 } from "lucide-react";
+import { Plus, Trash2, MessageSquare, Loader2, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DbSession } from "@/lib/supabase/types";
 
@@ -225,6 +225,17 @@ export function SessionSidebar({ onSessionSelect }: SessionSidebarProps) {
           )}
         </div>
       </ScrollArea>
+
+      {/* Presets link */}
+      <div className="border-t p-2">
+        <a
+          href="/chat/presets"
+          className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <Settings className="size-3.5" />
+          <span>プリセット管理</span>
+        </a>
+      </div>
     </aside>
   );
 }
