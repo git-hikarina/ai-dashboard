@@ -107,6 +107,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const validScopes = ['personal', 'team', 'organization'] as const;
+    if (!validScopes.includes(body.scope as typeof validScopes[number])) {
+      return NextResponse.json({ error: 'Invalid scope' }, { status: 400 });
+    }
     const scope = body.scope as DbPresetInsert['scope'];
 
     // Permission checks
