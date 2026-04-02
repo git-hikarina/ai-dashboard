@@ -420,6 +420,7 @@ describe("DbSession", () => {
     mode: "fixed",
     fixed_model: "gpt-4o",
     is_shared: false,
+    project_ids: [],
     created_at: "2025-01-01T00:00:00Z",
     updated_at: "2025-01-01T00:00:00Z",
   };

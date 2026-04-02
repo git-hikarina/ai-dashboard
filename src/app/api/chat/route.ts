@@ -5,6 +5,7 @@ import { autoRoute } from '@/lib/ai/router';
 import { verifyToken } from '@/lib/firebase/admin';
 import { createServiceClient } from '@/lib/supabase/server';
 import { shouldSendBudgetAlert, formatBudgetAlert, sendSlackNotification } from '@/lib/slack/notify';
+import { searchKnowledge } from '@/lib/knowledge/search';
 
 // ---------------------------------------------------------------------------
 // POST /api/chat — Streaming AI chat endpoint
@@ -15,12 +16,13 @@ export async function POST(request: Request) {
     const { uid } = await verifyToken(request.headers.get('authorization'));
 
     // 2. Parse request body
-    const { messages, modelId, sessionId, mode, presetId } = (await request.json()) as {
+    const { messages, modelId, sessionId, mode, presetId, projectIds } = (await request.json()) as {
       messages: UIMessage[];
       modelId: string;
       sessionId: string;
       mode?: 'auto' | 'fixed';
       presetId?: string | null;
+      projectIds?: string[];
     };
 
     // 3. Validate required fields
@@ -89,10 +91,64 @@ export async function POST(request: Request) {
     // 7. Get AI SDK provider instance
     const provider = getProvider(resolvedModelId);
 
+    // --- RAG コンテキスト注入 ---
+    let ragContext = "";
+    let activeProjectIds = projectIds ?? [];
+
+    // projectIdsが空の場合、デフォルトプロジェクトを検索
+    if (activeProjectIds.length === 0) {
+      const { data: userFull } = await supabase
+        .from('users')
+        .select('active_organization_id')
+        .eq('id', user.id)
+        .single();
+
+      if (userFull?.active_organization_id) {
+        const { data: defaultProject } = await supabase
+          .from("projects")
+          .select("id")
+          .eq("organization_id", userFull.active_organization_id)
+          .eq("is_default", true)
+          .single();
+
+        if (defaultProject) {
+          activeProjectIds = [defaultProject.id];
+        }
+      }
+    }
+
+    // RAG検索
+    let citations: Array<{ title: string; chunkIndex: number }> = [];
+    if (activeProjectIds.length > 0) {
+      const lastUserMessage = messages.filter((m: any) => m.role === "user").pop();
+      if (lastUserMessage) {
+        const queryText = lastUserMessage.parts
+          ?.filter((p: any): p is { type: 'text'; text: string } => p.type === 'text')
+          .map((p: any) => p.text)
+          .join('') ?? '';
+
+        if (queryText) {
+          const chunks = await searchKnowledge(queryText, activeProjectIds, 5);
+          if (chunks.length > 0) {
+            ragContext = "\n\n以下の参考情報を踏まえて回答してください：\n" +
+              chunks
+                .map((c) => `---\n${c.content}\n出典: ${c.documentTitle}\n---`)
+                .join("\n");
+            citations = chunks.map((c) => ({
+              title: c.documentTitle,
+              chunkIndex: c.chunkIndex,
+            }));
+          }
+        }
+      }
+    }
+
+    const fullSystemPrompt = (systemPrompt ?? "") + ragContext || undefined;
+
     // 8. Stream the response
     const result = streamText({
       model: provider,
-      system: systemPrompt,
+      system: fullSystemPrompt,
       messages: await convertToModelMessages(messages),
       maxOutputTokens: model.maxTokens,
       onFinish: async ({ text, usage }) => {
@@ -199,7 +255,11 @@ export async function POST(request: Request) {
       },
     });
 
-    return result.toUIMessageStreamResponse();
+    const response = result.toUIMessageStreamResponse();
+    if (citations.length > 0) {
+      response.headers.set("X-Citations", JSON.stringify(citations));
+    }
+    return response;
   } catch (error: unknown) {
     // Auth errors from verifyToken throw when header is missing/invalid
     const message = error instanceof Error ? error.message : 'Internal server error';

@@ -161,6 +161,7 @@ export interface DbSession {
   mode: SessionMode;
   fixed_model: string | null;
   is_shared: boolean;
+  project_ids: string[];
   created_at: string;
   updated_at: string;
 }
@@ -264,9 +265,9 @@ export type DbTeamCreditLogInsert = Omit<
 
 export type DbSessionInsert = Omit<
   DbSession,
-  "id" | "created_at" | "updated_at"
+  "id" | "created_at" | "updated_at" | "project_ids"
 > &
-  Partial<Pick<DbSession, "id">>;
+  Partial<Pick<DbSession, "id" | "project_ids">>;
 
 export type DbMessageInsert = Omit<DbMessage, "id" | "created_at"> &
   Partial<Pick<DbMessage, "id">>;
@@ -305,3 +306,66 @@ export type DbSessionUpdate = Partial<Omit<DbSession, "id" | "created_at">>;
 export type DbPresetUpdate = Partial<Omit<DbPreset, "id" | "created_at">>;
 
 export type DbModelPricingUpdate = Partial<Omit<DbModelPricing, "id">>;
+
+// ---------------------------------------------------------------------------
+// Phase 3: Knowledge (RAG)
+// ---------------------------------------------------------------------------
+
+export type ProjectMemberRole = "admin" | "member";
+
+export type DocumentSourceType = "text" | "pdf" | "docx" | "url";
+
+export type DocumentStatus = "processing" | "ready" | "error";
+
+export interface DbProject {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string;
+  is_default: boolean;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DbProjectInsert = Omit<DbProject, "id" | "created_at" | "updated_at"> &
+  Partial<Pick<DbProject, "id">>;
+
+export type DbProjectUpdate = Partial<Omit<DbProject, "id" | "created_at">>;
+
+export interface DbProjectMember {
+  project_id: string;
+  user_id: string;
+  role: ProjectMemberRole;
+  created_at: string;
+}
+
+export interface DbKnowledgeDocument {
+  id: string;
+  project_id: string;
+  title: string;
+  source_type: DocumentSourceType;
+  source_url: string | null;
+  status: DocumentStatus;
+  error_message: string | null;
+  uploaded_by: string;
+  chunk_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DbKnowledgeDocumentInsert = Omit<
+  DbKnowledgeDocument,
+  "id" | "created_at" | "updated_at" | "chunk_count" | "error_message"
+> &
+  Partial<Pick<DbKnowledgeDocument, "id">>;
+
+export interface DbDocumentChunk {
+  id: string;
+  document_id: string;
+  chunk_index: number;
+  content: string;
+  token_count: number;
+  embedding: number[] | null;
+  created_at: string;
+}

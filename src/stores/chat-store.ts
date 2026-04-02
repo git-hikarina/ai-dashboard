@@ -7,6 +7,7 @@ interface ChatTab {
   modelId: string;
   mode: 'auto' | 'fixed' | 'compare';
   presetId: string | null;
+  projectIds: string[];
 }
 
 interface ChatStore {
@@ -18,6 +19,7 @@ interface ChatStore {
   updateTabTitle: (sessionId: string, title: string) => void;
   updateTabModel: (sessionId: string, modelId: string) => void;
   updateTabPreset: (sessionId: string, presetId: string | null) => void;
+  updateTabProjectIds: (sessionId: string, projectIds: string[]) => void;
 }
 
 const MAX_TABS = 10;
@@ -40,6 +42,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       modelId: session.fixed_model || DEFAULT_MODEL_ID,
       mode: (session.mode as ChatTab['mode']) || 'fixed',
       presetId: null,
+      projectIds: [],
     };
     set({ tabs: [...tabs, newTab], activeTabId: session.id });
   },
@@ -68,5 +71,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   updateTabPreset: (sessionId, presetId) => set(state => ({
     tabs: state.tabs.map(t => t.sessionId === sessionId ? { ...t, presetId } : t),
+  })),
+
+  updateTabProjectIds: (sessionId, projectIds) => set(state => ({
+    tabs: state.tabs.map(t => t.sessionId === sessionId ? { ...t, projectIds } : t),
   })),
 }));
