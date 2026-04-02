@@ -4,12 +4,35 @@ import type { NextRequest } from "next/server";
 /**
  * Route-protection proxy (Next.js 16).
  *
- * Checks for the `__session` cookie set by the AuthContext on the client.
- * If the cookie is missing the user is redirected to /login.
- * Actual token verification happens in API routes via Firebase Admin SDK.
+ * 1. Basic認証（BASIC_AUTH_USER / BASIC_AUTH_PASSWORD が設定されている場合）
+ * 2. __session cookie によるルート保護
  */
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // ---- Basic Auth -----------------------------------------------------------
+  const basicUser = process.env.BASIC_AUTH_USER;
+  const basicPass = process.env.BASIC_AUTH_PASSWORD;
+
+  if (basicUser && basicPass) {
+    const authHeader = request.headers.get("authorization");
+    if (authHeader) {
+      const [scheme, encoded] = authHeader.split(" ");
+      if (scheme === "Basic" && encoded) {
+        const decoded = atob(encoded);
+        const [user, pass] = decoded.split(":");
+        if (user === basicUser && pass === basicPass) {
+          // Basic認証OK → 次のチェックへ
+        } else {
+          return unauthorizedResponse();
+        }
+      } else {
+        return unauthorizedResponse();
+      }
+    } else {
+      return unauthorizedResponse();
+    }
+  }
 
   // ---- Public paths — always pass through ---------------------------------
   const isPublicPath =
@@ -38,6 +61,13 @@ export function proxy(request: NextRequest) {
   }
 
   return NextResponse.next();
+}
+
+function unauthorizedResponse() {
+  return new NextResponse("Unauthorized", {
+    status: 401,
+    headers: { "WWW-Authenticate": 'Basic realm="Restricted"' },
+  });
 }
 
 export const config = {
