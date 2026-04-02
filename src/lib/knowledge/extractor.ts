@@ -16,9 +16,11 @@ export async function extractText(input: ExtractInput): Promise<string> {
       return input.content;
 
     case "pdf": {
-      const pdfParse = (await import("pdf-parse")).default;
-      const data = await pdfParse(input.buffer);
-      return data.text;
+      const { PDFParse } = await import("pdf-parse");
+      const parser = new PDFParse({ data: new Uint8Array(input.buffer) });
+      const result = await parser.getText();
+      await parser.destroy();
+      return result.text;
     }
 
     case "docx": {
