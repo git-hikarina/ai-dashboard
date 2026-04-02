@@ -39,6 +39,10 @@ ai-dashboard/
 │   │   │   │   └── page.tsx        # 個別チャットセッション（ストリーミング + コスト表示）
 │   │   │   └── presets/
 │   │   │       └── page.tsx        # プリセット管理ページ（CRUD + トグル）
+│   │   ├── projects/
+│   │   │   ├── page.tsx            # プロジェクト一覧（作成・デフォルト設定）
+│   │   │   └── [id]/
+│   │   │       └── page.tsx        # プロジェクト詳細（ドキュメント管理・D&D）
 │   │   ├── admin/
 │   │   │   ├── layout.tsx          # 管理者レイアウト（権限ガード + サイドナビ）
 │   │   │   ├── page.tsx            # → /admin/usage にリダイレクト
@@ -75,6 +79,19 @@ ai-dashboard/
 │   │           └── approval/
 │   │               └── [id]/
 │   │                   └── route.ts # 承認/却下API
+│   │       ├── projects/
+│   │       │   ├── route.ts        # プロジェクト一覧 / 作成
+│   │       │   └── [id]/
+│   │       │       ├── route.ts    # プロジェクト詳細 / 更新 / 削除
+│   │       │       └── members/
+│   │       │           ├── route.ts    # メンバー一覧 / 追加
+│   │       │           └── [userId]/
+│   │       │               └── route.ts # メンバー削除
+│   │       └── knowledge/
+│   │           └── documents/
+│   │               ├── route.ts    # ドキュメント一覧 / アップロード
+│   │               └── [id]/
+│   │                   └── route.ts # ドキュメント詳細 / 削除
 │   ├── components/
 │   │   ├── chat/
 │   │   │   ├── chat-input.tsx      # メッセージ入力（コスト表示付き）
@@ -84,7 +101,15 @@ ai-dashboard/
 │   │   │   ├── session-sidebar.tsx # セッション一覧サイドバー
 │   │   │   ├── preset-selector.tsx # プリセット選択ドロップダウン
 │   │   │   ├── cost-display.tsx    # インラインコスト表示
-│   │   │   └── cost-confirm-dialog.tsx # コスト確認ダイアログ（¥500+）
+│   │   │   ├── cost-confirm-dialog.tsx # コスト確認ダイアログ（¥500+）
+│   │   │   ├── project-selector.tsx # プロジェクト選択（マルチセレクト）
+│   │   │   └── citation-display.tsx # RAG出典表示
+│   │   ├── knowledge/
+│   │   │   ├── project-card.tsx    # プロジェクトカード
+│   │   │   ├── file-dropzone.tsx   # ファイルD&Dアップロード
+│   │   │   ├── url-input-dialog.tsx # URL取込ダイアログ
+│   │   │   ├── document-table.tsx  # ドキュメント一覧テーブル
+│   │   │   └── project-selector.tsx # プロジェクト選択（チャット用）
 │   │   ├── admin/
 │   │   │   ├── pricing-table.tsx   # モデル単価編集テーブル
 │   │   │   ├── usage-summary-cards.tsx  # 利用サマリーカード
@@ -92,7 +117,7 @@ ai-dashboard/
 │   │   │   ├── usage-by-user-table.tsx  # ユーザー別集計テーブル
 │   │   │   └── usage-by-model-table.tsx # モデル別集計テーブル
 │   │   ├── layout/
-│   │   │   └── header.tsx          # アプリヘッダー
+│   │   │   └── header.tsx          # アプリヘッダー（チャット・ナレッジ・管理者ナビ）
 │   │   ├── providers.tsx           # クライアントProviders
 │   │   └── ui/                     # shadcn/ui コンポーネント
 │   ├── contexts/
@@ -115,6 +140,12 @@ ai-dashboard/
 │   │   │   ├── client.ts           # ブラウザ用 Supabase クライアント
 │   │   │   ├── server.ts           # サーバー用 + サービスロールクライアント
 │   │   │   └── types.ts            # DB型定義（全テーブル）
+│   │   ├── knowledge/
+│   │   │   ├── extractor.ts       # テキスト抽出（PDF/DOCX/URL/テキスト）
+│   │   │   ├── chunker.ts         # チャンク分割（500tok, 50tok overlap）
+│   │   │   ├── embeddings.ts      # OpenAI エンベディング生成
+│   │   │   ├── pipeline.ts        # 処理パイプライン（抽出→分割→埋め込み→保存）
+│   │   │   └── search.ts          # ベクトル類似検索
 │   │   └── utils.ts                # cn() ユーティリティ
 │   ├── stores/
 │   │   └── chat-store.ts           # Zustand マルチタブ状態管理
@@ -122,7 +153,8 @@ ai-dashboard/
 ├── supabase/
 │   └── migrations/
 │       ├── 001_initial_schema.sql  # 全テーブル定義 + シードデータ
-│       └── 002_phase2_schema.sql   # Phase 2: presets, user_preset_preferences, budget列
+│       ├── 002_phase2_schema.sql   # Phase 2: presets, user_preset_preferences, budget列
+│       └── 003_phase3_schema.sql  # Phase 3: pgvector + projects/knowledge tables
 ├── __tests__/                      # Vitest テスト（198テスト）
 └── context/
     └── context.md                  # この仕様書
@@ -132,7 +164,7 @@ ai-dashboard/
 
 ## データベース設計（Supabase / PostgreSQL）
 
-### テーブル一覧（13テーブル）
+### テーブル一覧（17テーブル）
 
 | テーブル | 用途 |
 |---------|------|
@@ -143,12 +175,16 @@ ai-dashboard/
 | `team_members` | チームメンバー（junction） |
 | `credit_logs` | 個人クレジット履歴 |
 | `team_credit_logs` | チームクレジット履歴 |
-| `sessions` | チャットセッション（preset_id FK付き） |
+| `sessions` | チャットセッション（preset_id FK + project_ids） |
 | `messages` | チャットメッセージ |
 | `usage_logs` | AI使用量ログ（コスト記録、approval_status付き） |
 | `model_pricing` | モデル単価テーブル（管理者編集可） |
 | `presets` | カスタム指示プリセット（personal/team/organization スコープ） |
 | `user_preset_preferences` | ユーザーごとのプリセット有効/無効設定 |
+| `projects` | ナレッジプロジェクト（ドキュメントグループ） |
+| `project_members` | プロジェクトメンバー（admin/viewer） |
+| `knowledge_documents` | アップロードドキュメント（状態管理付き） |
+| `document_chunks` | ドキュメントチャンク（pgvectorエンベディング） |
 
 ### ユーザーロール
 
@@ -261,6 +297,18 @@ ai-dashboard/
 | GET | `/api/admin/usage` | Bearer(admin) | 利用状況サマリー（月次） |
 | GET | `/api/admin/usage/daily` | Bearer(admin) | 日別利用状況 |
 | PATCH | `/api/admin/approval/[id]` | Bearer(admin) | 承認/却下 |
+| GET | `/api/projects` | Bearer | プロジェクト一覧 |
+| POST | `/api/projects` | Bearer | プロジェクト作成 |
+| GET | `/api/projects/[id]` | Bearer | プロジェクト詳細 |
+| PATCH | `/api/projects/[id]` | Bearer(admin) | プロジェクト更新 |
+| DELETE | `/api/projects/[id]` | Bearer(admin) | プロジェクト削除 |
+| GET | `/api/projects/[id]/members` | Bearer | メンバー一覧 |
+| POST | `/api/projects/[id]/members` | Bearer(admin) | メンバー追加 |
+| DELETE | `/api/projects/[id]/members/[userId]` | Bearer(admin) | メンバー削除 |
+| GET | `/api/knowledge/documents` | Bearer | ドキュメント一覧 |
+| POST | `/api/knowledge/documents` | Bearer | ドキュメントアップロード（202 Accepted） |
+| GET | `/api/knowledge/documents/[id]` | Bearer | ドキュメント詳細（ポーリング用） |
+| DELETE | `/api/knowledge/documents/[id]` | Bearer | ドキュメント削除 |
 
 ---
 
@@ -285,8 +333,15 @@ ai-dashboard/
 - Slack連携（¥1,000超の高コスト警告 + 月間予算80%/100%アラート）
 - 認証ヘルパー（resolveUser: Firebase UID → ユーザー + 所属解決）
 
-### Phase 3: ナレッジ —「RAG と比較」
-- ドキュメントRAG（アップロード→ベクトル化→検索）
+### Phase 3a: ドキュメントRAG —「ナレッジ基盤」 ✅ 実装済み
+- プロジェクト管理（CRUD + メンバー管理）
+- ドキュメントアップロード（PDF/DOCX/URL/テキスト、D&D対応）
+- 非同期処理パイプライン（抽出→チャンク分割→エンベディング→保存）
+- pgvectorベクトル検索（コサイン類似度）
+- チャットRAG統合（プロジェクト選択→関連チャンクをシステムプロンプトに注入）
+- 出典表示（引用元ドキュメント表示）
+
+### Phase 3b: ナレッジ拡張 —「FAQ と比較」
 - FAQ登録・優先回答
 - ナレッジの適用範囲（全社/プリセット/個人）
 - 同時比較モード（横並びマルチモデル）
@@ -348,7 +403,7 @@ FIREBASE_ADMIN_PRIVATE_KEY=
 
 # AI Providers
 ANTHROPIC_API_KEY=
-OPENAI_API_KEY=
+OPENAI_API_KEY=               # チャット + RAGエンベディング（text-embedding-3-small）
 GOOGLE_GENERATIVE_AI_API_KEY=
 DEEPSEEK_API_KEY=
 XAI_API_KEY=
@@ -380,9 +435,10 @@ interface ChatTab {
   modelId: string;           // 'auto' で自動モード
   mode: 'auto' | 'fixed' | 'compare';
   presetId: string | null;   // Phase 2で追加
+  projectIds: string[];      // Phase 3aで追加
 }
 ```
 
 ---
 
-最終更新: 2026-04-01（Phase 2 完了）
+最終更新: 2026-04-02（Phase 3a 完了）
