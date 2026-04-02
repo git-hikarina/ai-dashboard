@@ -15,6 +15,9 @@ import { ChatInput } from "@/components/chat/chat-input";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { PresetSelector } from "@/components/chat/preset-selector";
 import { CostConfirmDialog } from "@/components/chat/cost-confirm-dialog";
+import { ProjectSelector } from "@/components/knowledge/project-selector";
+import { CitationDisplay } from "@/components/chat/citation-display";
+import type { Citation } from "@/components/chat/citation-display";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -75,7 +78,7 @@ export default function ChatSessionPage({
   const { id: sessionId } = use(params);
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
-  const { openTab, activeTabId, tabs, updateTabModel, updateTabPreset } = useChatStore();
+  const { openTab, activeTabId, tabs, updateTabModel, updateTabPreset, updateTabProjectIds } = useChatStore();
 
   // -- Local state -----------------------------------------------------------
 
@@ -87,6 +90,7 @@ export default function ChatSessionPage({
   const activeTab = tabs.find((t) => t.sessionId === sessionId);
   const modelId = activeTab?.modelId ?? sessionData?.fixed_model ?? DEFAULT_MODEL_ID;
   const presetId = activeTab?.presetId ?? null;
+  const projectIds = activeTab?.projectIds ?? [];
 
   // Cost estimation state
   const [costEstimate, setCostEstimate] = useState<{
@@ -101,6 +105,7 @@ export default function ChatSessionPage({
   const [showCostConfirm, setShowCostConfirm] = useState(false);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const costDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [citations, setCitations] = useState<Citation[]>([]);
 
   // -- Load session data on mount --------------------------------------------
 
@@ -167,9 +172,10 @@ export default function ChatSessionPage({
           sessionId,
           mode: modelId === "auto" ? "auto" : "fixed",
           presetId,
+          projectIds,
         },
       }),
-    [modelId, sessionId, presetId],
+    [modelId, sessionId, presetId, projectIds],
   );
 
   // -- Compute initial messages from loaded session data ---------------------
@@ -274,6 +280,13 @@ export default function ChatSessionPage({
       }
     },
     [sessionId, updateTabPreset, updateTabModel],
+  );
+
+  const handleProjectChange = useCallback(
+    (newProjectIds: string[]) => {
+      updateTabProjectIds(sessionId, newProjectIds);
+    },
+    [sessionId, updateTabProjectIds],
   );
 
   // -- Debounced cost estimation ----------------------------------------------
@@ -448,6 +461,10 @@ export default function ChatSessionPage({
           <PresetSelector
             selectedPresetId={presetId}
             onPresetSelect={handlePresetSelect}
+          />
+          <ProjectSelector
+            selectedIds={projectIds}
+            onSelectionChange={handleProjectChange}
           />
           <span className="text-xs text-muted-foreground">
             {sessionData?.title ?? "新しいチャット"}
