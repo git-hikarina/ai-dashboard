@@ -13,6 +13,7 @@ import {
   MessageSquare,
   ChevronDownIcon,
   ShieldCheck,
+  BookOpen,
 } from "lucide-react";
 
 export function Header() {
@@ -51,6 +52,26 @@ export function Header() {
                 <DropdownMenuItem>
                   <a href="/chat/presets" className="flex w-full">
                     プリセット管理
+                  </a>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* ナレッジ系 */}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button variant="ghost" size="sm" className="gap-1">
+                    <BookOpen className="size-4" />
+                    <span>ナレッジ</span>
+                    <ChevronDownIcon className="size-3.5 opacity-50" />
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="start" sideOffset={4}>
+                <DropdownMenuItem>
+                  <a href="/projects" className="flex w-full">
+                    プロジェクト管理
                   </a>
                 </DropdownMenuItem>
               </DropdownMenuContent>
