@@ -92,7 +92,7 @@ export function PricingTable({
                   />
                 ) : (
                   <span className="tabular-nums">
-                    ¥{item.input_price_per_1k.toFixed(4)}
+                    ¥{parseFloat(item.input_price_per_1k.toFixed(4))}
                   </span>
                 )}
               </td>
@@ -109,7 +109,7 @@ export function PricingTable({
                   />
                 ) : (
                   <span className="tabular-nums">
-                    ¥{item.output_price_per_1k.toFixed(4)}
+                    ¥{parseFloat(item.output_price_per_1k.toFixed(4))}
                   </span>
                 )}
               </td>
