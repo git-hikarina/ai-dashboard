@@ -161,6 +161,7 @@ export interface DbSession {
   mode: SessionMode;
   fixed_model: string | null;
   is_shared: boolean;
+  project_ids: string[];
   created_at: string;
   updated_at: string;
 }
@@ -264,9 +265,9 @@ export type DbTeamCreditLogInsert = Omit<
 
 export type DbSessionInsert = Omit<
   DbSession,
-  "id" | "created_at" | "updated_at"
+  "id" | "created_at" | "updated_at" | "project_ids"
 > &
-  Partial<Pick<DbSession, "id">>;
+  Partial<Pick<DbSession, "id" | "project_ids">>;
 
 export type DbMessageInsert = Omit<DbMessage, "id" | "created_at"> &
   Partial<Pick<DbMessage, "id">>;
